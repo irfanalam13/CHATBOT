@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me"
     ENCRYPTION_KEY: str = "change-me-fernet-key"
 
+    # ── CORS ───────────────────────────────────────────────────
+    # Comma-separated list of frontend origins allowed to call the API in
+    # production (when DEBUG is false). e.g.
+    # "https://app.example.com,https://chatbot.example.com".
+    # In DEBUG mode all origins are allowed regardless of this value.
+    CORS_ORIGINS: str = ""
+
     # ── JWT ────────────────────────────────────────────────────
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
@@ -122,6 +129,11 @@ class Settings(BaseSettings):
         ".pdf", ".docx", ".txt", ".csv", ".xlsx", ".xls",
         ".html", ".htm", ".md", ".json", ".xml", ".eml",
     )
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse CORS_ORIGINS into a clean list of origins."""
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @computed_field  # type: ignore[prop-decorator]
     @property

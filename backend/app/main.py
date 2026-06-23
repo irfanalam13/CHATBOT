@@ -61,9 +61,12 @@ def create_app() -> FastAPI:
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RateLimitMiddleware)
     app.add_middleware(RequestContextMiddleware)
+    # In DEBUG allow all origins for convenience; in production restrict to the
+    # explicit frontend origins from CORS_ORIGINS. Note: browsers reject the
+    # "*" wildcard when credentials are sent, so production must list origins.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.DEBUG else [],
+        allow_origins=["*"] if settings.DEBUG else settings.cors_origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
