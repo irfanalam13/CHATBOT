@@ -1,0 +1,117 @@
+# Reference Kubernetes manifests (api + worker). Secrets/config via Secret + ConfigMap.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: chatbot
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: chatbot-secrets
+  namespace: chatbot
+type: Opaque
+stringData:
+  SECRET_KEY: "replace-me"
+  ENCRYPTION_KEY: "replace-me"
+  ANTHROPIC_API_KEY: ""
+  OPENAI_API_KEY: ""
+  GOOGLE_API_KEY: ""
+  POSTGRES_PASSWORD: "chatbot"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chatbot-config
+  namespace: chatbot
+data:
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  POSTGRES_HOST: "postgres"
+  REDIS_URL: "redis://redis:6379/0"
+  CELERY_BROKER_URL: "redis://redis:6379/1"
+  CELERY_RESULT_BACKEND: "redis://redis:6379/2"
+  QDRANT_URL: "http://qdrant:6333"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot-api
+  namespace: chatbot
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app: chatbot-api}
+  template:
+    metadata:
+      labels: {app: chatbot-api}
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/your-org/chatbot-backend:latest
+          ports: [{containerPort: 8000}]
+          envFrom:
+            - configMapRef: {name: chatbot-config}
+            - secretRef: {name: chatbot-secrets}
+          readinessProbe:
+            httpGet: {path: /api/v1/ready, port: 8000}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/v1/health, port: 8000}
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: {cpu: "250m", memory: "512Mi"}
+            limits: {cpu: "1", memory: "1Gi"}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chatbot-worker
+  namespace: chatbot
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: chatbot-worker}
+  template:
+    metadata:
+      labels: {app: chatbot-worker}
+    spec:
+      containers:
+        - name: worker
+          image: ghcr.io/your-org/chatbot-backend:latest
+          command: ["celery", "-A", "app.workers.celery_app.celery_app", "worker",
+                    "--loglevel=info", "-Q", "ingestion,default"]
+          envFrom:
+            - configMapRef: {name: chatbot-config}
+            - secretRef: {name: chatbot-secrets}
+          resources:
+            requests: {cpu: "500m", memory: "1Gi"}
+            limits: {cpu: "2", memory: "4Gi"}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatbot-api
+  namespace: chatbot
+spec:
+  selector: {app: chatbot-api}
+  ports: [{port: 80, targetPort: 8000}]
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: chatbot-api-hpa
+  namespace: chatbot
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: chatbot-api
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: {type: Utilization, averageUtilization: 70}

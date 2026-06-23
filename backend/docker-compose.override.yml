@@ -1,0 +1,9 @@
+# Local override: remap host ports for postgres/redis so they don't collide
+# with the user's already-running local Postgres (5432) and Redis (6379).
+# Inter-container communication still uses the docker network (service names),
+# so the API/worker are unaffected. Auto-merged by `docker compose`.
+services:
+  postgres:
+    ports: ["5433:5432"]
+  redis:
+    ports: ["6380:6379"]
